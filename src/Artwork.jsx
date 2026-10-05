@@ -3,7 +3,19 @@ import React from 'react';
 // Pinturas originais em SVG, sem imagens externas.
 export default function Artwork({ kind = 'abstract' }) {
   let painting;
-  if (kind === 'night') {
+  if (kind === 'mineral') {
+    painting = <svg className="art" viewBox="0 0 400 300" role="img" aria-label="Pintura original abstrata com camadas minerais em terracota, verde e ouro">
+      <rect width="400" height="300" fill="#d9c9a6" /><path d="M0 235L82 92L151 190L235 45L319 182L400 103V300H0Z" fill="#7e5849" /><path d="M0 268L96 142L171 224L250 92L337 214L400 157V300H0Z" fill="#3f665d" opacity=".9" /><path d="M20 280L116 188L185 253L266 151L375 248" fill="none" stroke="#d8b85f" strokeWidth="13" /><g fill="#f1dfae"><circle cx="84" cy="72" r="13" /><circle cx="235" cy="43" r="8" /><circle cx="351" cy="91" r="17" /></g>
+    </svg>;
+  } else if (kind === 'tide') {
+    painting = <svg className="art" viewBox="0 0 400 300" role="img" aria-label="Pintura original com ondas geométricas azuis e linhas corais">
+      <rect width="400" height="300" fill="#e7dfc8" /><rect y="55" width="400" height="245" fill="#70989a" /><g fill="none" strokeLinecap="round"><path d="M-30 118Q55 48 140 118T310 118T480 118" stroke="#294f5c" strokeWidth="32" /><path d="M-40 185Q45 115 130 185T300 185T470 185" stroke="#b7d0c3" strokeWidth="27" /><path d="M-25 247Q60 177 145 247T315 247T485 247" stroke="#315f68" strokeWidth="35" /><path d="M15 83Q100 25 181 88T370 76" stroke="#d66f59" strokeWidth="8" /></g><circle cx="326" cy="54" r="28" fill="#dfb55e" />
+    </svg>;
+  } else if (kind === 'garden') {
+    painting = <svg className="art" viewBox="0 0 400 300" role="img" aria-label="Pintura original de jardim abstrato em cores elétricas">
+      <rect width="400" height="300" fill="#263d3d" /><g fill="none" strokeLinecap="round"><path d="M45 300Q40 190 98 105M126 300Q110 170 176 54M220 300Q214 175 287 88M318 300Q295 205 361 137" stroke="#66a06e" strokeWidth="15" /><path d="M92 112l-42-31M103 133l52-38M174 61l-35-39M282 96l49-49M355 144l33-25" stroke="#8bc77e" strokeWidth="12" /></g><g fill="#e97062"><circle cx="48" cy="75" r="25" /><circle cx="160" cy="88" r="31" /><circle cx="332" cy="47" r="27" /></g><g fill="#e6bd55"><circle cx="112" cy="151" r="18" /><circle cx="273" cy="119" r="22" /><circle cx="369" cy="142" r="15" /></g><path d="M0 268Q100 233 200 270T400 260V300H0Z" fill="#a75b74" />
+    </svg>;
+  } else if (kind === 'night') {
     painting = <svg className="art" viewBox="0 0 400 300" role="img" aria-label="Pintura original: céu azul com espirais douradas sobre colinas">
       <rect width="400" height="300" fill="#20344e" />
       <g fill="none" strokeLinecap="round">

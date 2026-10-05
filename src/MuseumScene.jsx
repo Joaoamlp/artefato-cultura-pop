@@ -1,6 +1,8 @@
 import React from 'react';
 import Artwork from './Artwork.jsx';
-import { canAdvance, money, products } from './game.js';
+import { CONFIG, canAdvance, money, products } from './game.js';
+
+const FocusContext = React.createContext(null);
 
 // Coordenadas do mundo: 1200 × 680. Os pés dos personagens ficam na origem.
 export function Character({ x = 0, y = 0, walking = false, facing = 1, kind = 'alex', scale = 1 }) {
@@ -24,8 +26,10 @@ export function Character({ x = 0, y = 0, walking = false, facing = 1, kind = 'a
   </g>;
 }
 
-function Spot({ label, x, y, w, h, to, onInteract, children, className = '', disabled = false }) {
-  return <g className={`world-hotspot ${className}`} role="button" tabIndex={disabled ? -1 : 0} aria-label={label} aria-disabled={disabled || undefined}
+function Spot({ label, x, y, w, h, to, onInteract, children, className = '', disabled = false, activeTarget: explicitTarget }) {
+  const contextTarget = React.useContext(FocusContext);
+  const activeTarget = explicitTarget ?? contextTarget;
+  return <g className={`world-hotspot ${activeTarget === to.id ? 'is-focused' : ''} ${className}`} role="button" tabIndex={disabled ? -1 : 0} aria-label={label} aria-disabled={disabled || undefined}
     onClick={event => { event.stopPropagation(); if (!disabled) onInteract(to); }}
     onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); if (!disabled) onInteract(to); } }}>
     <title>{label}</title>{children}
@@ -38,13 +42,29 @@ function Picture({ x, y, w = 160, kind }) {
 }
 function Plant({ x, y }) { return <g transform={`translate(${x} ${y})`}><ellipse cy="6" rx="35" ry="10" fill="#283e3a" opacity=".18" /><path d="M-23-36H23L16 4H-16Z" fill="#b47853" stroke="#765a42" strokeWidth="3" /><path d="M0-36V-124M0-52Q-40-69-31-102Q-3-96 0-52M0-71Q36-81 29-123Q1-112 0-71M0-96Q-26-106-17-145Q5-130 0-96" fill="#557762" stroke="#3d634f" strokeWidth="4" /></g>; }
 function Pedestal({ x, y }) { return <g transform={`translate(${x} ${y})`}><path d="M-31-90L10-100L39-85L-3-74Z" fill="#ece0c3" /><path d="M-31-90V-4L-3 12V-74Z" fill="#b7aa8c" /><path d="M-3-74L39-85V-1L-3 12Z" fill="#d3c4a5" /></g>; }
-function Door({ state, interact }) {
-  const ready = canAdvance(state);
-  return <Spot label={ready ? 'Entrar na próxima sala' : 'Examinar a porta'} x={1040} y={206} w={126} h={228} to={{ id: 'exit', x: 1092, y: 489 }} onInteract={interact}>
+function CharacterSpeech({ target, speech, onClose }) {
+  if (!speech) return null;
+  let x = 425, y = 78, w = 340, tail = '52%';
+  if (target === 'auctioneer') { x = 640; y = 92; w = 340; tail = '72%'; }
+  if (target?.startsWith('bid:')) {
+    const characterX = [436, 542, 648, 754][Number(target.split(':')[1])];
+    x = Math.max(72, Math.min(858, characterX - 135)); y = 206; w = 300; tail = '47%';
+  }
+  return <foreignObject className="npc-speech-object is-focused" x={x} y={y} width={w} height="210">
+    <div className="npc-speech" style={{ '--tail-x': tail }} role="dialog" aria-label={`Fala de ${speech.speaker}`}>
+      <div className="bubble-heading"><span className="bubble-avatar" aria-hidden="true">◉</span><strong>{speech.speaker}</strong></div>
+      <p>{speech.text}</p>{speech.title && <small>{speech.title}</small>}
+      <button onClick={event=>{event.stopPropagation();onClose();}}>Continuar <span>▸</span></button>
+    </div>
+  </foreignObject>;
+}
+function Door({ state, interact, activeTarget }) {
+  const ready = state.room === 5 || canAdvance(state);
+  return <Spot label={ready ? 'Entrar na próxima sala' : 'Examinar a porta'} x={1040} y={206} w={126} h={228} to={{ id: 'exit', x: 1092, y: 489 }} onInteract={interact} activeTarget={activeTarget}>
     <path d="M1040 434V213Q1103 173 1166 213V434Z" fill="#c4ad86" stroke="#77664e" strokeWidth="6" />
     <path d="M1053 429V222Q1103 189 1153 222V429Z" fill={ready ? '#6d8b80' : '#4f605c'} />
     <path d="M1066 423V228L1109 216V414Z" fill="#203e3b" opacity=".6" /><path d="M1060 434L1156 434L1195 475L1015 475Z" fill="#dce5b7" opacity={ready ? '.25' : '.05'} />
-    <circle cx="1137" cy="327" r="5" fill="#e8cf83" /><rect x="1066" y="166" width="75" height="26" rx="4" fill={ready ? '#dfd997' : '#b4b29a'} /><text x="1103" y="183" textAnchor="middle" fontSize="12" fill="#394b45">{state.room === 5 ? 'SAÍDA →' : 'GALERIA →'}</text>
+    <circle cx="1137" cy="327" r="5" fill="#e8cf83" /><rect x="1053" y="166" width="100" height="26" rx="4" fill={ready ? '#dfd997' : '#b4b29a'} /><text x="1103" y="183" textAnchor="middle" fontSize="12" fill="#394b45">{state.room === 5 ? 'SAÍDA →' : 'GALERIA →'}</text>
   </Spot>;
 }
 function Architecture({ room }) {
@@ -65,10 +85,10 @@ function Architecture({ room }) {
   </>;
 }
 
-export default function MuseumScene({ state, actor, interact, walk, hints, sceneRef }) {
+export default function MuseumScene({ state, actor, interact, walk, hints, sceneRef, activeTarget, speech, onSpeechClose }) {
   const room = state.room || 1;
   const obj = (id, x, y) => ({ id, x, y });
-  return <svg ref={sceneRef} className={`museum-world room-${room} ${hints ? 'show-hints' : ''}`} viewBox="0 0 1200 680" aria-label={`Cenário do museu, sala ${room}. Clique no chão para caminhar.`} onClick={event => {
+  return <svg ref={sceneRef} className={`museum-world room-${room} ${hints ? 'show-hints' : ''} ${activeTarget ? 'interaction-focus' : ''}`} viewBox="0 0 1200 680" aria-label={`Cenário do museu, sala ${room}. Clique no chão para caminhar.`} onClick={event => {
     if (event.target.closest('[role="button"]')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width * 1200;
@@ -76,6 +96,8 @@ export default function MuseumScene({ state, actor, interact, walk, hints, scene
     if (y > 427) walk(x, y);
   }}>
     <Architecture room={room} />
+    {activeTarget && <rect className="scene-focus-shade" width="1200" height="680" pointerEvents="none" />}
+    <FocusContext.Provider value={activeTarget}>
     {room === 1 && <>
       <text x="588" y="127" textAnchor="middle" fontFamily="Georgia" fontSize="36" letterSpacing="7" fill="#53604d">MUSEU S/A</text><text x="588" y="151" textAnchor="middle" fontSize="11" letterSpacing="4" fill="#6d725b">ARTE PARA TODOS. TERMOS SE APLICAM.</text>
       <Spot label="Ler o patrocinador" x={113} y={158} w={139} h={205} to={obj('sponsor',201,484)} onInteract={interact}><path d="M111 157H253V361H111Z" fill="#668276" stroke="#435f52" strokeWidth="5" /><path d="M113 314H252V360H113Z" fill="#dfcb87" /><text x="183" y="185" textAnchor="middle" fontSize="10" fill="#eee2b4">APRESENTADO POR</text><text x="183" y="247" textAnchor="middle" fontFamily="Georgia" fontSize="29" fill="#f7e5a9">capital®</text><text x="183" y="338" textAnchor="middle" fontSize="11" fill="#354f42">Seu olhar tem valor.</text></Spot>
@@ -95,7 +117,7 @@ export default function MuseumScene({ state, actor, interact, walk, hints, scene
       <path d="M88 105H1010V162H88Z" fill="#bf6544" /><text x="548" y="141" textAnchor="middle" fontFamily="Georgia" fontSize="28" fill="#fff1c6">Van Gogh™ — uma obra em cada sacola.</text>
       <Spot label="Observar Noite em circulação" x={492} y={196} w={157} h={144} to={obj('night',570,482)} onInteract={interact}><Picture x={494} y={196} w={152} kind="night" /></Spot>
       <path d="M130 186H425V396H130ZM710 186H997V396H710Z" fill="#6a6c50" stroke="#a98f60" strokeWidth="9" /><path d="M134 286H421M714 286H993M134 391H421M714 391H993" stroke="#bea06b" strokeWidth="9" />
-      {products.map((product,i)=>{const x=[177,303,185,752,872,759,876][i]; const y=[218,212,321,216,217,322,321][i];return <Spot key={product.id} label={`Examinar ${product.name}`} x={x-12} y={y-10} w={90} h={81} to={obj(`product:${product.id}`,x+25,490)} onInteract={interact}><foreignObject x={x} y={y} width="68" height="65"><div className={`merch-object ${product.id}`} /></foreignObject><rect x={x+1} y={y+62} width="66" height="17" fill="#f1d88e" /><text x={x+34} y={y+74} textAnchor="middle" fontSize="10" fill="#4c4f3b">R$ {product.price}</text></Spot>})}
+      {products.map((product,i)=>{const x=[177,303,185,752,872,759,876][i]; const y=[218,212,321,216,217,322,321][i]; const bought=state.purchasedProducts.includes(product.id); return <Spot key={product.id} label={`${bought?'Comprado:':'Examinar'} ${product.name}`} x={x-12} y={y-10} w={90} h={81} to={obj(`product:${product.id}`,x+25,490)} onInteract={interact}><foreignObject x={x} y={y} width="68" height="65"><div className={`merch-object ${product.id} ${bought?'is-bought':''}`} /></foreignObject><rect x={x+1} y={y+62} width="66" height="17" fill={bought?'#a9cf9a':'#f1d88e'} /><text x={x+34} y={y+74} textAnchor="middle" fontSize="10" fill="#4c4f3b">{bought?'COMPRADO ✓':`R$ ${product.price}`}</text></Spot>})}
       <path d="M402 518H761L789 538H378Z" fill="#d0ac72" stroke="#7b684d" strokeWidth="4" /><path d="M393 538V584H772V538" fill="#ac8559" /><text x="581" y="565" textAnchor="middle" fontSize="20" fill="#fff0c1">COMPRE DOIS, LEVE TRÊS</text><text x="556" y="371" textAnchor="middle" fontSize="10" fill="#64654e">O contexto é vendido separadamente.</text>
     </>}
     {room === 4 && <>
@@ -107,18 +129,22 @@ export default function MuseumScene({ state, actor, interact, walk, hints, scene
       {state.bids>=4&&<g pointerEvents="none"><g transform="rotate(-12 278 272)"><rect x="149" y="248" width="254" height="53" fill="#d9c89d" stroke="#a9573d" strokeWidth="4" /><text x="276" y="285" textAnchor="middle" fill="#a9573d" fontSize="33" letterSpacing="7">VENDIDO</text></g><text x="598" y="328" textAnchor="middle" fill="#dfc99a" fontSize="13">Destino: coleção privada. Acesso público: nenhum.</text></g>}
     </>}
     {room === 5 && <>
-      <g opacity=".3" className="locked-art"><Picture x={214} y={164} w={186} /><Picture x={474} y={164} w={186} kind="night" /><Picture x={741} y={164} w={186} kind="auction" /></g>
-      <path d="M128 404H972V437H128Z" fill="#566f66" /><path d="M131 400V128H972V400" fill="none" stroke="#536c63" strokeWidth="10" />{[165,256,347,438,529,620,711,802,893,966].map(x=><path key={x} d={`M${x} 133V401`} stroke="#788d80" strokeWidth="7" />)}
-      <rect x="307" y="187" width="478" height="101" rx="5" fill="#344e45" stroke="#d1bc83" strokeWidth="4" /><text x="546" y="225" textAnchor="middle" fontFamily="Georgia" fontSize="29" fill="#f0ddaa">A cultura está logo ali.</text><text x="546" y="256" textAnchor="middle" fontSize="14" fill="#d1c899">Do outro lado da sua assinatura.</text>
+      {!state.premiumPlusOwned && <g className="paywall-barrier"><g opacity=".18" className="locked-art"><Picture x={214} y={164} w={186} /><Picture x={474} y={164} w={186} kind="night" /><Picture x={741} y={164} w={186} kind="auction" /></g><path d="M128 404H972V437H128Z" fill="#566f66" /><path d="M131 400V128H972V400" fill="none" stroke="#536c63" strokeWidth="10" />{[165,256,347,438,529,620,711,802,893,966].map(x=><path key={x} d={`M${x} 133V401`} stroke="#788d80" strokeWidth="7" />)}</g>}
+      {!state.premiumPlusOwned && <Spot label={state.premiumOwned ? 'Examinar as letras miúdas' : 'Exclusivo para assinantes Premium'} x={307} y={187} w={478} h={101} to={obj('premium-banner',546,500)} onInteract={interact} disabled={!state.premiumOwned}><g className={state.premiumTrapRevealed ? 'premium-trap-revealed' : 'paywall-sign'}><rect x="307" y="187" width="478" height="101" rx="5" fill={state.premiumTrapRevealed?'#713d35':'#344e45'} stroke="#d1bc83" strokeWidth="4" /><text x="546" y="222" textAnchor="middle" fontFamily="Georgia" fontSize="19" fill="#f0ddaa">OBRAS DISPONÍVEIS APENAS PARA O PLANO</text><text x="535" y="257" textAnchor="middle" fontSize="25" fontWeight="bold" fill="#f0ddaa">PREMIUM</text><text x="605" y="242" fontSize="6" letterSpacing="1" fill="#f0ddaa">plus</text></g></Spot>}
+      {state.premiumPlusOwned && <g className="revealed-gallery"><Spot label="Contemplar Ritmo mineral" x={137} y={137} w={225} h={209} to={obj('premium-art:mineral',246,493)} onInteract={interact}><Picture x={147} y={143} w={205} kind="mineral" /><text x="249" y="337" textAnchor="middle" fontSize="11" fill="#3d554a">Ritmo mineral · Joana Reis</text></Spot><Spot label="Contemplar Arquivo de maré" x={431} y={137} w={225} h={209} to={obj('premium-art:tide',542,493)} onInteract={interact}><Picture x={441} y={143} w={205} kind="tide" /><text x="543" y="337" textAnchor="middle" fontSize="11" fill="#3d554a">Arquivo de maré · Caio Luz</text></Spot><Spot label="Contemplar Jardim elétrico" x={725} y={137} w={225} h={209} to={obj('premium-art:garden',836,493)} onInteract={interact}><Picture x={735} y={143} w={205} kind="garden" /><text x="837" y="337" textAnchor="middle" fontSize="11" fill="#3d554a">Jardim elétrico · Nina Vale</text></Spot></g>}
       <Spot label="Usar terminal Museu+" x={568} y={342} w={129} h={176} to={obj('terminal',631,558)} onInteract={interact}><path d="M584 505L604 383H659L684 505Z" fill="#b2b59a" stroke="#526a5e" strokeWidth="4" /><rect x="570" y="347" width="121" height="80" rx="8" fill="#324f46" stroke="#94a791" strokeWidth="5" /><text x="630" y="377" textAnchor="middle" fontSize="23" fill="#eed692">m+</text><text x="630" y="405" textAnchor="middle" fontSize="10" fill="#e7deb9">CONSULTAR PLANOS</text></Spot>
       <Spot label="Assistir anúncio por crédito" x={263} y={338} w={136} h={190} to={obj('credit-ad',328,562)} onInteract={interact}><path d="M284 402L269 527M376 402L391 527" stroke="#7b654c" strokeWidth="7" /><rect x="266" y="341" width="128" height="130" fill="#d7b96d" stroke="#8e7749" strokeWidth="5" /><text x="330" y="376" textAnchor="middle" fontSize="12" fill="#3c5446">SUA ATENÇÃO</text><text x="330" y="399" textAnchor="middle" fontSize="12" fill="#3c5446">VALE CRÉDITOS</text><path d="M319 414L344 430L319 446Z" fill="#4f6957" /></Spot>
+      <Spot label="Usar máquina de créditos" x={808} y={323} w={152} h={212} to={obj('credit-machine',884,568)} onInteract={interact}><path d="M825 514L836 344H930L945 514Z" fill="#987453" stroke="#493f34" strokeWidth="5" /><rect x="843" y="363" width="80" height="74" rx="5" fill="#203c37" stroke="#dac17d" strokeWidth="4" /><text x="883" y="385" textAnchor="middle" fontSize="9" fill="#f5dfa4">SEU SALDO</text><text x="883" y="410" textAnchor="middle" fontSize="19" fontWeight="bold" fill="#f5dfa4">◈ {state.credits}</text><text x="883" y="427" textAnchor="middle" fontSize="8" fill="#b9cda9">R$ 5 = ◈ 1</text><rect x="854" y="455" width="58" height="17" rx="3" fill="#dfc983" /><circle cx="884" cy="492" r="9" fill="#263f38" /></Spot>
     </>}
     {room === 6 && <>
-      <text x="611" y="234" textAnchor="middle" fontFamily="Georgia" fontSize="35" fill="#647368">Você chegou ao fim</text><text x="611" y="280" textAnchor="middle" fontFamily="Georgia" fontSize="35" fill="#647368">da experiência gratuita.</text><text x="611" y="332" textAnchor="middle" fontSize="12" letterSpacing="3" fill="#7d897b">O QUE FICOU DO SEU OLHAR?</text><Pedestal x={610} y={485} /><Spot label="Ler recibo da visita" x={565} y={357} w={91} h={151} to={obj('receipt',606,553)} onInteract={interact}><path d="M585 377H630V409L625 405L620 410L615 405L610 410L605 405L600 410L595 405L590 410L585 405Z" fill="#faf2dc" stroke="#b7b5a2" /><path d="M594 386H620M594 392H620M594 398H612" stroke="#899381" strokeWidth="2" /></Spot>
+      <text x="611" y="234" textAnchor="middle" fontFamily="Georgia" fontSize="35" fill="#647368">Você chegou ao fim</text><text x="611" y="280" textAnchor="middle" fontFamily="Georgia" fontSize="35" fill="#647368">da experiência.</text><text x="611" y="332" textAnchor="middle" fontSize="12" letterSpacing="3" fill="#7d897b">O QUE FICOU DO SEU OLHAR?</text><Pedestal x={610} y={485} /><Spot label="Ler recibo da visita" x={565} y={357} w={91} h={151} to={obj('receipt',606,553)} onInteract={interact}><path d="M585 377H630V409L625 405L620 410L615 405L610 410L605 405L600 410L595 405L590 410L585 405Z" fill="#faf2dc" stroke="#b7b5a2" /><path d="M594 386H620M594 392H620M594 398H612" stroke="#899381" strokeWidth="2" /></Spot>
     </>}
-    {room < 6 && <Door state={state} interact={interact} />}
+    {room < 5 && <Door state={state} interact={interact} activeTarget={activeTarget} />}
+    {room === 5 && <Door state={state} interact={interact} activeTarget={activeTarget} />}
+    <CharacterSpeech target={activeTarget} speech={speech} onClose={onSpeechClose} />
     <g pointerEvents="none"><Character x={actor.x} y={actor.y} walking={actor.walking} facing={actor.facing} /><g className="player-label" transform={`translate(${actor.x} ${actor.y})`}><text className="player-name" y="24" textAnchor="middle">ALEX · VOCÊ</text></g></g>
     {actor.walking && <ellipse cx={actor.x} cy={actor.y} rx="13" ry="5" fill="none" stroke="#f5dfad" strokeWidth="2" pointerEvents="none" />}
     <path d="M0 662H1200V680H0Z" fill="#213e35" opacity=".17" pointerEvents="none" />
+    </FocusContext.Provider>
   </svg>;
 }
